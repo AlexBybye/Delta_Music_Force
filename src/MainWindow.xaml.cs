@@ -37,6 +37,7 @@ public partial class MainWindow : Window
             hwnd = new WindowInteropHelper(this).Handle; source = HwndSource.FromHwnd(hwnd); source.AddHook(Hook);
             if (smoke == null)
             {
+                WindowsIO.StartManualInputMonitor();
                 stopReady = WindowsIO.RegisterHotKey(hwnd, 2, 0x4000, 0x78);
                 playReady = WindowsIO.RegisterHotKey(hwnd, 1, 0x4000, 0x77);
                 HotkeyText.Text = $"{(playReady ? "F8 播放／暂停" : "F8 已被占用")}     {(stopReady ? "F9 停止" : "F9 已被占用，游戏播放不可用")}";
@@ -130,12 +131,14 @@ public partial class MainWindow : Window
     {
         if (busy || closing) return;
         if (player.Active && !preview) { player.Cancel(player.Snapshot.State == "playing"); return; }
+        // The playback worker can finish just before its UI continuation records the pause position.
+        // Wait for that continuation; do not call RequestStop here because it intentionally clears progress.
+        if (activeUi is { IsCompleted: false }) await activeUi;
         if (player.NeedsRelease || plan == null) return;
         if (!stopReady) { Status.Text = "停止热键 F9 被其他程序占用，请关闭占用程序后重新打开拾音。试听仍可使用。"; return; }
         busy = true; UpdateControls();
         try
         {
-            if (player.Active || activeUi is { IsCompleted: false }) await StopAndWait();
             var games = WindowsIO.FindGames();
             if (games.Length == 0) { Status.Text = "没有找到三角洲游戏窗口。请先启动游戏，再点击播放。"; return; }
             GameWindow? target = games.Length == 1 ? games[0] : Targets.SelectedItem as GameWindow;
@@ -174,7 +177,7 @@ public partial class MainWindow : Window
         {
             var result = await worker; paused = result.Paused; resumeIndex = result.NextIndex; resumePosition = result.Position;
             UpdateProgress(result.Position);
-            Status.Text = result.Error ?? (result.Paused ? "已暂停 · 继续时从下一个音开始" : result.Completed ? (preview ? "试听结束" : "演奏完成") : "已停止");
+            Status.Text = result.Error ?? (result.Paused ? result.PauseNotice ?? "已暂停 · 继续时从下一个音开始" : result.Completed ? (preview ? "试听结束" : "演奏完成") : "已停止");
         }
         catch (OperationCanceledException) { Status.Text = "已停止"; paused = false; }
         catch (Exception e) { Report(e); }
@@ -270,11 +273,11 @@ public partial class MainWindow : Window
     private async void OnDrop(object sender, DragEventArgs e) { if (e.Data.GetData(DataFormats.FileDrop) is string[] { Length: 1 } files) await LoadSong(files[0]); }
     private void DiagnosticsClick(object sender, RoutedEventArgs e)
     {
-        try { Clipboard.SetText($"DeltaPlayer 0.1.1\n状态: {Status.Text}\n文件: {song?.Hash}\n速度: {plan?.Speed}\n八度: {plan?.Octaves}\n拾音管理员权限: {WindowsIO.ProcessElevated()}\n游戏窗口: {lastTarget?.Title}\n游戏 PID: {lastTarget?.Pid}\n游戏管理员权限: {(lastTarget == null ? null : WindowsIO.ProcessElevated(lastTarget.Pid))}\n{lastError}\n{player.Diagnostics}"); Status.Text = "诊断信息已复制。"; }
+        try { Clipboard.SetText($"DeltaPlayer 0.1.3\n状态: {Status.Text}\n文件: {song?.Hash}\n速度: {plan?.Speed}\n八度: {plan?.Octaves}\n拾音管理员权限: {WindowsIO.ProcessElevated()}\n游戏窗口: {lastTarget?.Title}\n游戏 PID: {lastTarget?.Pid}\n游戏管理员权限: {(lastTarget == null ? null : WindowsIO.ProcessElevated(lastTarget.Pid))}\n{lastError}\n{player.Diagnostics}"); Status.Text = "诊断信息已复制。"; }
         catch (Exception error) { Report(error, "无法访问剪贴板。"); }
     }
     private void HelpClick(object sender, RoutedEventArgs e) => MessageBox.Show(this,
-        "打开曲谱 → 试听 → 播放。\n\n播放前请装备乐器，倒计时内切回游戏。F8 播放／暂停，F9 停止。切出游戏会自动停止。若提示权限不一致，请点击“以管理员身份重启”；游戏建议使用无边框窗口模式，并关闭聊天框、背包等界面。\n\nTXT 示例：\nBPM=120\n1 1 5 5 6 6 5- | 0 【1】 (5)\n\n0 是休止；# 升半音；_ 减半；. 附点；- 延长一拍；【】高八度；() 低八度。空格和换行不改变节奏。\n\n当前预设：中音 C4，Z X C V B N M 及逗号；鼠标左／右切换八度，中键升半音。时序效果仍需在实际游戏版本验证。",
+        "打开曲谱 → 试听 → 播放。\n\n播放前请装备乐器，倒计时内切回游戏。F8 播放／暂停，F9 停止。演奏期间若操作键盘或鼠标，拾音会自动暂停并保留进度；松开后按 F8 继续。切出游戏会自动停止。若提示权限不一致，请点击“以管理员身份重启”；游戏建议使用无边框窗口模式，并关闭聊天框、背包等界面。\n\nTXT 示例：\nBPM=120\n1 1 5 5 6 6 5- | 0 【1】 (5)\n\n0 是休止；# 升半音；_ 减半；. 附点；- 延长一拍；【】高八度；() 低八度。空格和换行不改变节奏。\n\n当前预设：中音 C4，Z X C V B N M 及逗号；鼠标左／右切换八度，中键升半音。时序效果仍需在实际游戏版本验证。",
         "使用帮助", MessageBoxButton.OK, MessageBoxImage.Information);
     private async void OnClosing(object? sender, CancelEventArgs e)
     {
@@ -285,6 +288,7 @@ public partial class MainWindow : Window
             if (player.NeedsRelease) { Status.Text = "仍有按键或设备未清理，请重试释放后关闭。"; return; }
             await SaveSettings(); timer.Stop();
             if (stopReady) WindowsIO.UnregisterHotKey(hwnd, 2); if (playReady) WindowsIO.UnregisterHotKey(hwnd, 1);
+            WindowsIO.StopManualInputMonitor();
             source?.RemoveHook(Hook); allowClose = true;
             _ = Dispatcher.BeginInvoke(Close);
         }

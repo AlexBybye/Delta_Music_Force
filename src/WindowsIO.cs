@@ -12,6 +12,13 @@ public sealed record GameWindow(nint Handle, int Pid, long Started, string Title
 
 public static class WindowsIO
 {
+    private const int WhKeyboardLl = 13, WhMouseLl = 14;
+    private const int WmKeyDown = 0x0100, WmSysKeyDown = 0x0104;
+    private const int WmMouseMove = 0x0200, WmLButtonDown = 0x0201, WmRButtonDown = 0x0204, WmMButtonDown = 0x0207, WmMouseWheel = 0x020A, WmXButtonDown = 0x020B, WmMouseHWheel = 0x020E;
+    private const uint LlkhfInjected = 0x10, LlmhfInjected = 0x01;
+    private static LowLevelHook? keyboardHookProc, mouseHookProc;
+    private static nint keyboardHook, mouseHook;
+    private static int manualInputArmed, manualInputSeen;
     [StructLayout(LayoutKind.Sequential)] public struct Mouse { public int X, Y; public uint Data, Flags, Time; public nuint Extra; }
     [StructLayout(LayoutKind.Sequential)] public struct Keyboard { public ushort Vk, Scan; public uint Flags, Time; public nuint Extra; }
     [StructLayout(LayoutKind.Explicit)] public struct InputUnion { [FieldOffset(0)] public Mouse Mouse; [FieldOffset(0)] public Keyboard Keyboard; }
@@ -26,6 +33,14 @@ public static class WindowsIO
     [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int key);
     [DllImport("user32.dll", SetLastError = true)] public static extern bool RegisterHotKey(nint hwnd, int id, uint mods, uint vk);
     [DllImport("user32.dll")] public static extern bool UnregisterHotKey(nint hwnd, int id);
+    private delegate nint LowLevelHook(int code, nint message, nint data);
+    [StructLayout(LayoutKind.Sequential)] private struct KeyboardHookData { public uint VkCode, ScanCode, Flags, Time; public nuint Extra; }
+    [StructLayout(LayoutKind.Sequential)] private struct Point { public int X, Y; }
+    [StructLayout(LayoutKind.Sequential)] private struct MouseHookData { public Point Point; public uint MouseData, Flags, Time; public nuint Extra; }
+    [DllImport("user32.dll", SetLastError = true)] private static extern nint SetWindowsHookEx(int hookType, LowLevelHook callback, nint module, uint threadId);
+    [DllImport("user32.dll", SetLastError = true)] private static extern bool UnhookWindowsHookEx(nint hook);
+    [DllImport("user32.dll")] private static extern nint CallNextHookEx(nint hook, int code, nint message, nint data);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] private static extern nint GetModuleHandle(string? moduleName);
     [DllImport("kernel32.dll", SetLastError = true)] private static extern nint OpenProcess(uint desiredAccess, bool inheritHandle, int processId);
     [DllImport("kernel32.dll", SetLastError = true)] private static extern bool CloseHandle(nint handle);
     [DllImport("advapi32.dll", SetLastError = true)] private static extern bool OpenProcessToken(nint processHandle, uint desiredAccess, out nint tokenHandle);
@@ -99,6 +114,56 @@ public static class WindowsIO
         GetWindowThreadProcessId(target.Handle, out int pid);
         if (pid != target.Pid) throw new InvalidOperationException("游戏窗口已关闭，请重新选择。");
     }
+    public static bool IsHardwareKeyboardInput(uint flags) => (flags & LlkhfInjected) == 0;
+    public static bool IsHardwareMouseInput(uint flags) => (flags & LlmhfInjected) == 0;
+    public static void StartManualInputMonitor()
+    {
+        if (keyboardHook != 0 || mouseHook != 0) return;
+        keyboardHookProc = KeyboardInput; mouseHookProc = MouseInput;
+        nint module = GetModuleHandle(null);
+        keyboardHook = SetWindowsHookEx(WhKeyboardLl, keyboardHookProc, module, 0);
+        mouseHook = SetWindowsHookEx(WhMouseLl, mouseHookProc, module, 0);
+        if (keyboardHook == 0 || mouseHook == 0)
+        {
+            StopManualInputMonitor();
+            throw new Win32Exception(Marshal.GetLastWin32Error(), "无法监听键盘和鼠标输入。");
+        }
+    }
+    public static void StopManualInputMonitor()
+    {
+        DisarmManualInputMonitor();
+        if (keyboardHook != 0) { UnhookWindowsHookEx(keyboardHook); keyboardHook = 0; }
+        if (mouseHook != 0) { UnhookWindowsHookEx(mouseHook); mouseHook = 0; }
+        keyboardHookProc = null; mouseHookProc = null;
+    }
+    public static void DisarmManualInputMonitor()
+    {
+        Volatile.Write(ref manualInputArmed, 0); Interlocked.Exchange(ref manualInputSeen, 0);
+    }
+    public static void ArmManualInputMonitor()
+    {
+        if (keyboardHook == 0 || mouseHook == 0) throw new InvalidOperationException("键鼠监听未准备好，请重新打开拾音后再试。");
+        Interlocked.Exchange(ref manualInputSeen, 0); Volatile.Write(ref manualInputArmed, 1);
+    }
+    internal static string? ConsumeManualInputProblem() => Interlocked.Exchange(ref manualInputSeen, 0) != 0
+        ? "检测到键盘或鼠标操作，已暂停。松开后按 F8 继续。" : null;
+    public static bool IsManualKeyboardInput(uint virtualKey, uint flags) => virtualKey is not 0x77 and not 0x78 && IsHardwareKeyboardInput(flags);
+    private static nint KeyboardInput(int code, nint message, nint data)
+    {
+        if (code >= 0 && Volatile.Read(ref manualInputArmed) != 0 && (message == WmKeyDown || message == WmSysKeyDown))
+        {
+            var input = Marshal.PtrToStructure<KeyboardHookData>(data);
+            if (IsManualKeyboardInput(input.VkCode, input.Flags)) Interlocked.Exchange(ref manualInputSeen, 1);
+        }
+        return CallNextHookEx(keyboardHook, code, message, data);
+    }
+    private static nint MouseInput(int code, nint message, nint data)
+    {
+        bool relevant = message is WmMouseMove or WmLButtonDown or WmRButtonDown or WmMButtonDown or WmMouseWheel or WmXButtonDown or WmMouseHWheel;
+        if (code >= 0 && Volatile.Read(ref manualInputArmed) != 0 && relevant && IsHardwareMouseInput(Marshal.PtrToStructure<MouseHookData>(data).Flags))
+            Interlocked.Exchange(ref manualInputSeen, 1);
+        return CallNextHookEx(mouseHook, code, message, data);
+    }
     public static void ValidateIdentity(GameWindow target)
     {
         using var process = Process.GetProcessById(target.Pid);
@@ -124,7 +189,15 @@ public sealed class GameOutput : IOutput
     private readonly Action<ushort, bool, bool> send;
     private readonly List<(ushort Code, bool Mouse)> held = new();
     public bool HasHeld => held.Count != 0;
-    public GameOutput(GameWindow target) : this(() => WindowsIO.Check(target), WindowsIO.Send) { WindowsIO.ValidateIdentity(target); }
+    public GameOutput(GameWindow target) : this(() =>
+    {
+        WindowsIO.Check(target);
+        if (WindowsIO.ConsumeManualInputProblem() is string problem) throw new PlaybackPauseException(problem);
+    }, WindowsIO.Send)
+    {
+        WindowsIO.ValidateIdentity(target);
+        WindowsIO.ArmManualInputMonitor();
+    }
     public GameOutput(Action check, Action<ushort, bool, bool> send) { this.check = check; this.send = send; }
     public void Check() => check();
     private void Down(ushort code, bool mouse)
@@ -149,7 +222,7 @@ public sealed class GameOutput : IOutput
         }
         if (errors.Count > 0) throw new InvalidOperationException(string.Join("；", errors));
     }
-    public void Close() => Release();
+    public void Close() { Release(); WindowsIO.DisarmManualInputMonitor(); }
 }
 
 public sealed class PreviewOutput : IOutput

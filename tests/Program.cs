@@ -175,6 +175,15 @@ Test("only ordinary player to elevated game requires elevation", () => {
     Assert(WindowsIO.PermissionProblem(7, _ => false) == null);
     Assert(WindowsIO.PermissionProblem(7, _ => null) == null);
 });
+Test("manual keyboard or mouse input reports a resumable pause", () => {
+    Assert(WindowsIO.IsHardwareKeyboardInput(0)); Assert(!WindowsIO.IsHardwareKeyboardInput(0x10));
+    Assert(WindowsIO.IsHardwareMouseInput(0)); Assert(!WindowsIO.IsHardwareMouseInput(1));
+    Assert(!WindowsIO.IsManualKeyboardInput(0x77, 0)); Assert(!WindowsIO.IsManualKeyboardInput(0x78, 0));
+    Assert(WindowsIO.IsManualKeyboardInput(0x57, 0)); Assert(!WindowsIO.IsManualKeyboardInput(0x57, 0x10));
+    var clock = new FakeClock(); var output = new Recording(clock) { PauseAt = .2 };
+    var result = new Player().Run(P(N(1, 0, .5), N(2, .5, 1, 62)), () => output, clock, default);
+    Assert(result.Paused && result.NextIndex == 1 && result.Position > 0 && result.PauseNotice != null);
+});
 Test("MIDI excessive declared payload rejected", () => {
     byte[] invalid = [0x4d,0x54,0x68,0x64,0,0,0,6,0,0,0,1,1,0xe0,0x4d,0x54,0x72,0x6b,0,0,0,6,0,0xf0,0xff,0xff,0xff,0x7f];
     Reject(() => ScoreImport.ReadMidi(invalid));
@@ -212,8 +221,8 @@ sealed class Recording(FakeClock clock) : IOutput
     public readonly List<(string Kind, double Time)> Events = new();
     public bool HasHeld { get; private set; }
     public bool ReleaseFails;
-    public double LoseFocusAt = double.PositiveInfinity, PreparationCost;
-    public void Check() { if (clock.Now >= LoseFocusAt) throw new Exception("focus lost"); }
+    public double LoseFocusAt = double.PositiveInfinity, PauseAt = double.PositiveInfinity, PreparationCost;
+    public void Check() { if (clock.Now >= PauseAt) throw new PlaybackPauseException("movement input"); if (clock.Now >= LoseFocusAt) throw new Exception("focus lost"); }
     public void Prepare(Fingering f) { clock.Now += PreparationCost; HasHeld = f.Modifiers != 0; Events.Add(("prepare", clock.Now)); }
     public void Down(Fingering f) { HasHeld = true; Events.Add(("down", clock.Now)); }
     public void Release() { if (ReleaseFails) throw new Exception("release failed"); if (HasHeld) Events.Add(("up", clock.Now)); HasHeld = false; }

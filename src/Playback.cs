@@ -35,7 +35,8 @@ public interface IOutput
     void Close();
 }
 
-public sealed record PlaybackResult(bool Paused, bool Completed, int NextIndex, double Position, string? Error);
+public sealed class PlaybackPauseException(string message) : OperationCanceledException(message);
+public sealed record PlaybackResult(bool Paused, bool Completed, int NextIndex, double Position, string? Error, string? PauseNotice = null);
 public sealed record PlaybackSnapshot(double Position, int Index, string State);
 
 public sealed class Player
@@ -70,7 +71,7 @@ public sealed class Player
     public PlaybackResult Run(Plan plan, Func<IOutput> create, IPlaybackClock clock, CancellationToken token,
         int index = 0, double position = 0, int countdown = 0)
     {
-        IOutput? output = null; string? error = null; bool completed = false;
+        IOutput? output = null; string? error = null, pauseNotice = null; bool completed = false;
         double origin = 0, currentPosition = position;
         try
         {
@@ -117,6 +118,7 @@ public sealed class Player
             clock.WaitUntil(origin + plan.Duration, token, Check);
             currentPosition = plan.Duration; completed = true;
         }
+        catch (PlaybackPauseException e) { Interlocked.Exchange(ref pauseRequested, 1); pauseNotice = e.Message; Log(e.Message); }
         catch (OperationCanceledException) { }
         catch (Exception e) { error = e.Message; Log(e.ToString()); }
         finally
@@ -139,7 +141,7 @@ public sealed class Player
         }
         bool paused = Volatile.Read(ref pauseRequested) == 1 && error == null && !completed;
         Log($"session end: completed={completed}, paused={paused}, next={index}, error={error ?? "none"}");
-        return new(paused, completed, paused ? index : 0, paused || completed ? currentPosition : 0, error);
+        return new(paused, completed, paused ? index : 0, paused || completed ? currentPosition : 0, error, pauseNotice);
     }
     public async Task RetryRelease()
     {
