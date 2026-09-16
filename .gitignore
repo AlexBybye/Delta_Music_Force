@@ -1,0 +1,20 @@
+# .NET build output
+[Bb]in/
+[Oo]bj/
+artifacts/
+
+# IDE and local workspace state
+.vs/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Test and runtime by-products
+TestResults/
+*.log
+
+# Operating-system metadata
+.DS_Store
+Thumbs.db
