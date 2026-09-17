@@ -6,7 +6,16 @@
     <Grid.RowDefinitions><RowDefinition Height="48" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
     <Grid>
       <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Image Source="Assets/app.ico" Width="36" Height="36" Margin="0,0,12,0"/><TextBlock Text="拾音" FontSize="25" FontWeight="SemiBold" /><TextBlock Text="游戏口琴播放器" Foreground="{StaticResource Muted}" Margin="14,7,0,0" FontSize="12" /></StackPanel>
-      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"><Button x:Name="OpenTop" Content="打开曲谱" Click="OpenClick" Visibility="Collapsed" Margin="0,0,10,0" /><Button Content="使用帮助" Click="HelpClick" Padding="10,8" Background="Transparent" BorderThickness="0" /></StackPanel>
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+        <Button x:Name="OpenTop" Content="打开曲谱" Click="OpenClick" Visibility="Collapsed" Margin="0,0,10,0" />
+        <Button Content="使用帮助" Click="HelpClick" Padding="10,8" Margin="0,0,4,0" Background="Transparent" BorderThickness="0" />
+        <Button Style="{StaticResource IconLink}" Click="GitHubClick" ToolTip="在 GitHub 查看项目" AutomationProperties.Name="在 GitHub 查看拾音项目">
+          <Image Source="Assets/github.png" Width="22" Height="22" Stretch="Uniform" />
+        </Button>
+        <Button Style="{StaticResource IconLink}" Width="42" Click="BilibiliClick" ToolTip="访问作者的哔哩哔哩空间" AutomationProperties.Name="访问作者的哔哩哔哩空间">
+          <Image Source="Assets/bilibili.png" Width="30" Height="20" Stretch="Uniform" />
+        </Button>
+      </StackPanel>
     </Grid>
     <Border Grid.Row="1" MinHeight="380" Background="#FFFCF7" BorderBrush="#E5DCD1" BorderThickness="1" CornerRadius="20" Margin="0,20,0,18" Padding="28">
       <Grid>

@@ -13,6 +13,8 @@
     <Resource Include="../resources/app.ico" Link="Assets/app.ico" />
     <Resource Include="../resources/2.png" Link="Assets/mascot.png" />
     <Resource Include="../resources/1.jpg" Link="Assets/collage.jpg" />
+    <Resource Include="../resources/github.png" Link="Assets/github.png" />
+    <Resource Include="../resources/bilibili.png" Link="Assets/bilibili.png" />
     <Content Include="../resources/1.mp3" Link="Assets/startup.mp3" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

@@ -24,6 +24,11 @@
       </ControlTemplate></Setter.Value></Setter>
     </Style>
     <Style x:Key="Primary" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="Background" Value="{StaticResource Accent}" /><Setter Property="Foreground" Value="White" /><Setter Property="BorderBrush" Value="{StaticResource Accent}" /></Style>
+    <Style x:Key="IconLink" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+      <Setter Property="Width" Value="34" /><Setter Property="Height" Value="34" />
+      <Setter Property="Padding" Value="6" /><Setter Property="Margin" Value="2,0,0,0" />
+      <Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" />
+    </Style>
     <Style TargetType="ComboBox"><Setter Property="Padding" Value="10,7" /><Setter Property="FontSize" Value="14" /></Style>
   </Application.Resources>
 </Application>

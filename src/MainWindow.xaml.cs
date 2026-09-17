@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
@@ -290,12 +291,19 @@ public partial class MainWindow : Window
     private async void OnDrop(object sender, DragEventArgs e) { if (e.Data.GetData(DataFormats.FileDrop) is string[] { Length: 1 } files) await LoadSong(files[0]); }
     private void DiagnosticsClick(object sender, RoutedEventArgs e)
     {
-        try { Clipboard.SetText($"DeltaPlayer 0.2.0\n状态: {Status.Text}\n文件: {song?.Hash}\n速度: {plan?.Speed}\n八度: {plan?.Octaves}\n拾音管理员权限: {WindowsIO.ProcessElevated()}\n游戏窗口: {lastTarget?.Title}\n游戏 PID: {lastTarget?.Pid}\n游戏管理员权限: {(lastTarget == null ? null : WindowsIO.ProcessElevated(lastTarget.Pid))}\n{lastError}\n{player.Diagnostics}"); Status.Text = "诊断信息已复制。"; }
+        try { Clipboard.SetText($"DeltaPlayer 0.2.1\n状态: {Status.Text}\n文件: {song?.Hash}\n速度: {plan?.Speed}\n八度: {plan?.Octaves}\n拾音管理员权限: {WindowsIO.ProcessElevated()}\n游戏窗口: {lastTarget?.Title}\n游戏 PID: {lastTarget?.Pid}\n游戏管理员权限: {(lastTarget == null ? null : WindowsIO.ProcessElevated(lastTarget.Pid))}\n{lastError}\n{player.Diagnostics}"); Status.Text = "诊断信息已复制。"; }
         catch (Exception error) { Report(error, "无法访问剪贴板。"); }
     }
     private void HelpClick(object sender, RoutedEventArgs e) => MessageBox.Show(this,
         "没有不靠谱的事，只有不靠谱的人(doge)\n\n建议流程：简谱图片 → skill转化简谱 → 打开曲谱 → 本地试听 → 游戏演奏。\n\n点击“游戏演奏”或“继续演奏”后有 3 秒切回游戏；在游戏内按 F8 则立即开始。\n试听与演奏互斥，暂停后需先停止才能试听。\n\n使用方法：F8 演奏／暂停，F9 停止。\n\n注意：\n1:演奏前请装备口琴。\n2:演奏期间若操作键盘或鼠标，拾音会自动暂停并保留进度；松开后按 F8 继续。切出游戏会自动停止。\n3:若提示权限不一致，请点击“以管理员身份重启”；\n4:游戏建议使用无边框窗口模式，并关闭聊天框、背包等界面。\n\nTXT 示例：\nBPM=120(可选，不写默认120)\n1 1 5 5 6 6 5- | 0 【1】 (5)\n\n0 是休止；# 升半音；_ 减半；. 附点；- 延长一拍；【】高八度；() 低八度。空格和换行不改变节奏。\n\n当前预设：中音 C4 BPM = 120",
         "使用帮助", MessageBoxButton.OK, MessageBoxImage.Information);
+    private void GitHubClick(object sender, RoutedEventArgs e) => OpenExternalLink("https://github.com/AlexBybye/Delta_Music_Force");
+    private void BilibiliClick(object sender, RoutedEventArgs e) => OpenExternalLink("https://space.bilibili.com/426312700");
+    private void OpenExternalLink(string url)
+    {
+        try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
+        catch (Exception error) { Report(error, "无法打开链接，请检查系统默认浏览器设置。"); }
+    }
     private async void OnClosing(object? sender, CancelEventArgs e)
     {
         StopStartupSound();
