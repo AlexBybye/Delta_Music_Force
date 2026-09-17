@@ -5,7 +5,14 @@
     <AssemblyName>DeltaPlayer</AssemblyName>
     <RootNamespace>DeltaPlayer</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>../resources/app.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup><PackageReference Include="Melanchall.DryWetMidi" Version="7.2.0" /></ItemGroup>
   <ItemGroup><None Update="example.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" /></ItemGroup>
+  <ItemGroup>
+    <Resource Include="../resources/app.ico" Link="Assets/app.ico" />
+    <Resource Include="../resources/2.png" Link="Assets/mascot.png" />
+    <Resource Include="../resources/1.jpg" Link="Assets/collage.jpg" />
+    <Content Include="../resources/1.mp3" Link="Assets/startup.mp3" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

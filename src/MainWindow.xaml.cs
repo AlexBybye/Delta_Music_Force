@@ -4,7 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using System.Windows.Shapes;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using Microsoft.Win32;
 
@@ -25,6 +25,7 @@ public partial class MainWindow : Window
     private HwndSource? source; private nint hwnd;
     private string lastError = "";
     private GameWindow? lastTarget;
+    private MediaPlayer? startupSound;
 
     public MainWindow(string? smokeDirectory = null)
     {
@@ -40,7 +41,7 @@ public partial class MainWindow : Window
                 WindowsIO.StartManualInputMonitor();
                 stopReady = WindowsIO.RegisterHotKey(hwnd, 2, 0x4000, 0x78);
                 playReady = WindowsIO.RegisterHotKey(hwnd, 1, 0x4000, 0x77);
-                HotkeyText.Text = $"{(playReady ? "F8 播放／暂停" : "F8 已被占用")}     {(stopReady ? "F9 停止" : "F9 已被占用，游戏播放不可用")}";
+                HotkeyText.Text = $"{(playReady ? "F8 演奏／暂停" : "F8 已被占用")}     {(stopReady ? "F9 停止" : "F9 已被占用，游戏播放不可用")}";
             }
         };
         timer.Tick += (_, _) =>
@@ -49,10 +50,16 @@ public partial class MainWindow : Window
             var state = player.Snapshot; UpdateProgress(state.Position);
             if (state.State != "playing") Status.Text = state.State;
             else Status.Text = preview ? "正在试听 · 这是适配后的旋律" : "正在播放 · 切出游戏会自动停止";
-            PlayButton.Content = !preview ? (state.State == "playing" ? "暂停" : "取消") : "播放";
+            PlayButton.Content = !preview ? (state.State == "playing" ? "暂停演奏" : "取消倒计时") : "游戏演奏";
         };
         timer.Start(); Closing += OnClosing;
-        Loaded += async (_, _) => { if (smoke != null) await Smoke(); };
+        Loaded += async (_, _) =>
+        {
+            if (smoke != null) { await Smoke(); return; }
+            if (SystemParameters.ClientAreaAnimation)
+                Layout.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(260)));
+            PlayStartupSound();
+        };
         UpdateControls();
     }
     private nint Hook(nint h, int message, nint w, nint l, ref bool handled)
@@ -166,6 +173,7 @@ public partial class MainWindow : Window
     private void BeginOutput(bool isPreview, Func<IOutput> factory, int countdown)
     {
         if (plan == null) return;
+        StopStartupSound();
         preview = isPreview; var currentPlan = plan;
         int start = paused ? resumeIndex : 0; double position = paused ? resumePosition : 0;
         paused = false;
@@ -240,10 +248,10 @@ public partial class MainWindow : Window
         VoiceToggle.IsEnabled = editable; PartialButton.IsEnabled = editable;
         PreviewButton.IsEnabled = !busy && !player.NeedsRelease && plan != null && (preview || (!running && !paused));
         PreviewButton.ToolTip = !preview && (running || paused) ? "停止游戏播放后可试听" : null;
-        PreviewButton.Content = preview && running ? "结束试听" : "试听";
+        PreviewButton.Content = preview && running ? "结束试听" : "本地试听";
         PlayButton.IsEnabled = !busy && !player.NeedsRelease && plan != null && !preview;
         PlayButton.ToolTip = preview ? "结束试听后可播放" : null;
-        PlayButton.Content = running && !preview ? (player.Snapshot.State == "playing" ? "暂停" : "取消") : paused ? "继续" : "播放";
+        PlayButton.Content = running && !preview ? (player.Snapshot.State == "playing" ? "暂停演奏" : "取消倒计时") : paused ? "继续演奏" : "游戏演奏";
         StopButton.IsEnabled = running || paused || busy;
         RetryButton.Visibility = player.NeedsRelease ? Visibility.Visible : Visibility.Collapsed;
         RetryButton.IsEnabled = !busy;
@@ -253,38 +261,44 @@ public partial class MainWindow : Window
     private void UpdateProgress(double seconds)
     {
         double total = plan?.Duration ?? song?.Duration ?? 0;
+        Contour.MoveTo(seconds, player.Active && player.Snapshot.State == "playing");
         Progress.Value = total <= 0 ? 0 : Math.Clamp(seconds / total, 0, 1);
         static string Format(double s) => $"{(int)s / 60:00}:{(int)s % 60:00}";
         TimeLabel.Text = $"{Format(seconds)} / {Format(total)}";
     }
-    private void DrawContour()
+    private void DrawContour() => Contour.SetPlan(plan);
+    private void PlayStartupSound()
     {
-        Contour.Children.Clear();
-        if (plan == null || Contour.ActualWidth < 1) return;
-        var notes = plan.Notes; int step = Math.Max(1, notes.Length / 72);
-        int low = notes.Min(n => n.Finger.Pitch), high = notes.Max(n => n.Finger.Pitch);
-        for (int i = 0; i < notes.Length; i += step)
+        try
         {
-            var n = notes[i];
-            var mark = new Rectangle { Width = Math.Max(2, Math.Min(20, (n.Off - n.On) / plan.Duration * Contour.ActualWidth)), Height = 4, RadiusX = 2, RadiusY = 2, Fill = new SolidColorBrush(Color.FromRgb(103, 155, 137)) };
-            Canvas.SetLeft(mark, n.On / plan.Duration * Math.Max(0, Contour.ActualWidth - 20));
-            Canvas.SetTop(mark, 40 - (n.Finger.Pitch - low) / (double)Math.Max(1, high - low) * 34); Contour.Children.Add(mark);
+            string path = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "startup.mp3");
+            if (!File.Exists(path)) return;
+            startupSound = new MediaPlayer { Volume = .35 };
+            startupSound.MediaEnded += (_, _) => StopStartupSound();
+            startupSound.MediaFailed += (_, _) => StopStartupSound();
+            startupSound.Open(new Uri(path)); startupSound.Play();
         }
+        catch { StopStartupSound(); } // Optional decoration must never block the player.
     }
-    private void ContourChanged(object sender, SizeChangedEventArgs e) => DrawContour();
+    private void StopStartupSound()
+    {
+        var sound = startupSound; startupSound = null;
+        sound?.Close();
+    }
     private void ViewportChanged(object sender, SizeChangedEventArgs e) { if (Layout != null) Layout.MinHeight = Math.Max(0, Viewport.ActualHeight - 48); }
     private void OnDragOver(object sender, DragEventArgs e) { e.Effects = !busy && !player.Active && !player.NeedsRelease && e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None; e.Handled = true; }
     private async void OnDrop(object sender, DragEventArgs e) { if (e.Data.GetData(DataFormats.FileDrop) is string[] { Length: 1 } files) await LoadSong(files[0]); }
     private void DiagnosticsClick(object sender, RoutedEventArgs e)
     {
-        try { Clipboard.SetText($"DeltaPlayer 0.1.3\n状态: {Status.Text}\n文件: {song?.Hash}\n速度: {plan?.Speed}\n八度: {plan?.Octaves}\n拾音管理员权限: {WindowsIO.ProcessElevated()}\n游戏窗口: {lastTarget?.Title}\n游戏 PID: {lastTarget?.Pid}\n游戏管理员权限: {(lastTarget == null ? null : WindowsIO.ProcessElevated(lastTarget.Pid))}\n{lastError}\n{player.Diagnostics}"); Status.Text = "诊断信息已复制。"; }
+        try { Clipboard.SetText($"DeltaPlayer 0.2.0\n状态: {Status.Text}\n文件: {song?.Hash}\n速度: {plan?.Speed}\n八度: {plan?.Octaves}\n拾音管理员权限: {WindowsIO.ProcessElevated()}\n游戏窗口: {lastTarget?.Title}\n游戏 PID: {lastTarget?.Pid}\n游戏管理员权限: {(lastTarget == null ? null : WindowsIO.ProcessElevated(lastTarget.Pid))}\n{lastError}\n{player.Diagnostics}"); Status.Text = "诊断信息已复制。"; }
         catch (Exception error) { Report(error, "无法访问剪贴板。"); }
     }
     private void HelpClick(object sender, RoutedEventArgs e) => MessageBox.Show(this,
-        "打开曲谱 → 试听 → 播放。\n\n播放前请装备乐器，倒计时内切回游戏。F8 播放／暂停，F9 停止。演奏期间若操作键盘或鼠标，拾音会自动暂停并保留进度；松开后按 F8 继续。切出游戏会自动停止。若提示权限不一致，请点击“以管理员身份重启”；游戏建议使用无边框窗口模式，并关闭聊天框、背包等界面。\n\nTXT 示例：\nBPM=120\n1 1 5 5 6 6 5- | 0 【1】 (5)\n\n0 是休止；# 升半音；_ 减半；. 附点；- 延长一拍；【】高八度；() 低八度。空格和换行不改变节奏。\n\n当前预设：中音 C4，Z X C V B N M 及逗号；鼠标左／右切换八度，中键升半音。时序效果仍需在实际游戏版本验证。",
+        "没有不靠谱的事，只有不靠谱的人(doge)\n\n建议流程：简谱图片 → skill转化简谱 → 打开曲谱 → 本地试听 → 游戏演奏。\n\n点击“游戏演奏”或“继续演奏”后有 3 秒切回游戏；在游戏内按 F8 则立即开始。\n试听与演奏互斥，暂停后需先停止才能试听。\n\n使用方法：F8 演奏／暂停，F9 停止。\n\n注意：\n1:演奏前请装备口琴。\n2:演奏期间若操作键盘或鼠标，拾音会自动暂停并保留进度；松开后按 F8 继续。切出游戏会自动停止。\n3:若提示权限不一致，请点击“以管理员身份重启”；\n4:游戏建议使用无边框窗口模式，并关闭聊天框、背包等界面。\n\nTXT 示例：\nBPM=120(可选，不写默认120)\n1 1 5 5 6 6 5- | 0 【1】 (5)\n\n0 是休止；# 升半音；_ 减半；. 附点；- 延长一拍；【】高八度；() 低八度。空格和换行不改变节奏。\n\n当前预设：中音 C4 BPM = 120",
         "使用帮助", MessageBoxButton.OK, MessageBoxImage.Information);
     private async void OnClosing(object? sender, CancelEventArgs e)
     {
+        StopStartupSound();
         if (allowClose) return; e.Cancel = true; if (closing) return; closing = true;
         try
         {
@@ -311,11 +325,38 @@ public partial class MainWindow : Window
             Options.IsExpanded = true; VoicePanel.Visibility = Visibility.Visible; await Dispatcher.Yield(DispatcherPriority.ApplicationIdle); Capture("expanded");
             var playBottom = PlayButton.TranslatePoint(new Point(0, PlayButton.ActualHeight), SongPanel);
             if (PlayButton.ActualHeight < 30 || playBottom.Y > SongPanel.ActualHeight + 1) throw new Exception("Play control clipped");
+            // Exercise real window handlers with a silent sink; never create game or MIDI outputs.
+            BeginOutput(true, () => new SmokeOutput(), 0);
+            if (PlayButton.IsEnabled || !PreviewButton.IsEnabled) throw new Exception("Preview exclusivity failed");
+            Task? previewSession = activeUi;
+            await ToggleGame(0);
+            if (activeUi != previewSession || !preview) throw new Exception("F8 escaped preview guard");
+            await StopAndWait();
+            BeginOutput(false, () => new SmokeOutput(), 3);
+            if (PreviewButton.IsEnabled || !PlayButton.IsEnabled) throw new Exception("Countdown exclusivity failed");
+            await StopAndWait();
+            BeginOutput(false, () => new SmokeOutput(), 0);
+            if (PreviewButton.IsEnabled) throw new Exception("Game exclusivity failed");
+            await Task.Delay(180);
+            player.Cancel(true);
+            if (activeUi != null) await activeUi;
+            if (!paused || PreviewButton.IsEnabled || !PlayButton.IsEnabled) throw new Exception("Pause exclusivity failed");
+            await StopAndWait();
+            if (!PreviewButton.IsEnabled || !PlayButton.IsEnabled) throw new Exception("Stopped controls failed");
             Viewport.ScrollToEnd(); await Dispatcher.Yield(DispatcherPriority.ApplicationIdle); Capture("expanded-bottom");
-            await File.WriteAllTextAsync(System.IO.Path.Combine(smoke!, "result.txt"), plan != null ? "PASS: import, adaptation, empty/loaded/compact render; no game input" : "FAIL: no plan");
+            await File.WriteAllTextAsync(System.IO.Path.Combine(smoke!, "result.txt"), plan != null ? "PASS: import, adaptation, render, preview/F8/countdown/game/pause/stop exclusivity; no game input" : "FAIL: no plan");
         }
         catch (Exception e) { await File.WriteAllTextAsync(System.IO.Path.Combine(smoke!, "result.txt"), e.ToString()); Environment.ExitCode = 1; }
         finally { Close(); }
+    }
+    private sealed class SmokeOutput : IOutput
+    {
+        public bool HasHeld => false;
+        public void Check() { }
+        public void Prepare(Fingering finger) { }
+        public void Down(Fingering finger) { }
+        public void Release() { }
+        public void Close() { }
     }
     private void Capture(string name)
     {
