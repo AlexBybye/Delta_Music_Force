@@ -59,7 +59,7 @@ public partial class MainWindow : Window
     {
         if (message != 0x0312) return 0;
         if (w == 2) { RequestStop(); handled = true; }
-        if (w == 1) { _ = ToggleGame(); handled = true; }
+        if (w == 1) { _ = ToggleGame(0); handled = true; }
         return 0;
     }
     private async void OpenClick(object sender, RoutedEventArgs e)
@@ -114,31 +114,33 @@ public partial class MainWindow : Window
     private void Report(Exception e, string? text = null) { lastError = e.ToString(); Status.Text = text == null ? e.Message : text + " " + e.Message; }
     private async void PreviewClick(object sender, RoutedEventArgs e)
     {
-        if (busy) return;
+        if (busy || closing) return;
+        // A paused game still owns its resume position; stop it before previewing.
+        if (!preview && (player.Active || activeUi is { IsCompleted: false } || paused)) return;
         if (plan == null || player.NeedsRelease) return;
         busy = true; UpdateControls();
         try
         {
-            if (player.Active || activeUi is { IsCompleted: false }) { bool wasPreview = preview; await StopAndWait(); if (wasPreview) return; }
+            if (preview) { await StopAndWait(); return; }
             paused = false; resumeIndex = 0; resumePosition = 0;
             BeginOutput(true, () => new PreviewOutput(), 0);
         }
         catch (Exception error) { Report(error); }
         finally { busy = false; UpdateControls(); }
     }
-    private async void PlayClick(object sender, RoutedEventArgs e) => await ToggleGame();
-    private async Task ToggleGame()
+    // The button gives time to return to the game; F8 is used inside the game.
+    private async void PlayClick(object sender, RoutedEventArgs e) => await ToggleGame(3);
+    private async Task ToggleGame(int countdown)
     {
-        if (busy || closing) return;
+        if (busy || closing || preview) return;
         if (player.Active && !preview) { player.Cancel(player.Snapshot.State == "playing"); return; }
-        // The playback worker can finish just before its UI continuation records the pause position.
-        // Wait for that continuation; do not call RequestStop here because it intentionally clears progress.
-        if (activeUi is { IsCompleted: false }) await activeUi;
-        if (player.NeedsRelease || plan == null) return;
-        if (!stopReady) { Status.Text = "停止热键 F9 被其他程序占用，请关闭占用程序后重新打开拾音。试听仍可使用。"; return; }
         busy = true; UpdateControls();
         try
         {
+            // Serialize hotkey requests while the previous session records its resume position.
+            if (activeUi is { IsCompleted: false }) await activeUi;
+            if (closing || player.NeedsRelease || plan == null) return;
+            if (!stopReady) { Status.Text = "停止热键 F9 被其他程序占用，请关闭占用程序后重新打开拾音。试听仍可使用。"; return; }
             var games = WindowsIO.FindGames();
             if (games.Length == 0) { Status.Text = "没有找到三角洲游戏窗口。请先启动游戏，再点击播放。"; return; }
             GameWindow? target = games.Length == 1 ? games[0] : Targets.SelectedItem as GameWindow;
@@ -156,7 +158,7 @@ public partial class MainWindow : Window
             }
             AdminButton.Visibility = Visibility.Collapsed;
             TargetPanel.Visibility = Visibility.Collapsed;
-            BeginOutput(false, () => new GameOutput(target), 3);
+            BeginOutput(false, () => new GameOutput(target), countdown);
         }
         catch (Exception e) { Report(e); }
         finally { busy = false; UpdateControls(); }
@@ -236,9 +238,11 @@ public partial class MainWindow : Window
         Voices.IsEnabled = Speed.IsEnabled = Options.IsEnabled = editable;
         VoiceToggle.Visibility = song?.Voices.Length > 1 ? Visibility.Visible : Visibility.Collapsed;
         VoiceToggle.IsEnabled = editable; PartialButton.IsEnabled = editable;
-        PreviewButton.IsEnabled = !busy && !player.NeedsRelease && plan != null;
+        PreviewButton.IsEnabled = !busy && !player.NeedsRelease && plan != null && (preview || (!running && !paused));
+        PreviewButton.ToolTip = !preview && (running || paused) ? "停止游戏播放后可试听" : null;
         PreviewButton.Content = preview && running ? "结束试听" : "试听";
-        PlayButton.IsEnabled = !busy && !player.NeedsRelease && plan != null;
+        PlayButton.IsEnabled = !busy && !player.NeedsRelease && plan != null && !preview;
+        PlayButton.ToolTip = preview ? "结束试听后可播放" : null;
         PlayButton.Content = running && !preview ? (player.Snapshot.State == "playing" ? "暂停" : "取消") : paused ? "继续" : "播放";
         StopButton.IsEnabled = running || paused || busy;
         RetryButton.Visibility = player.NeedsRelease ? Visibility.Visible : Visibility.Collapsed;
