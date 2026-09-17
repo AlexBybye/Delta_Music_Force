@@ -16,5 +16,8 @@
     <Resource Include="../resources/github.png" Link="Assets/github.png" />
     <Resource Include="../resources/bilibili.png" Link="Assets/bilibili.png" />
     <Content Include="../resources/1.mp3" Link="Assets/startup.mp3" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../README.md" Link="README.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../曲库/**/*" Link="曲库/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../.codex/skills/ai-jianpu-to-deltaplayer/**/*" Link="skill/ai-jianpu-to-deltaplayer/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

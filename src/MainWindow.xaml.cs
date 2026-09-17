@@ -295,7 +295,7 @@ public partial class MainWindow : Window
         catch (Exception error) { Report(error, "无法访问剪贴板。"); }
     }
     private void HelpClick(object sender, RoutedEventArgs e) => MessageBox.Show(this,
-        "没有不靠谱的事，只有不靠谱的人(doge)\n\n建议流程：简谱图片 → skill转化简谱 → 打开曲谱 → 本地试听 → 游戏演奏。\n\n点击“游戏演奏”或“继续演奏”后有 3 秒切回游戏；在游戏内按 F8 则立即开始。\n试听与演奏互斥，暂停后需先停止才能试听。\n\n使用方法：F8 演奏／暂停，F9 停止。\n\n注意：\n1:演奏前请装备口琴。\n2:演奏期间若操作键盘或鼠标，拾音会自动暂停并保留进度；松开后按 F8 继续。切出游戏会自动停止。\n3:若提示权限不一致，请点击“以管理员身份重启”；\n4:游戏建议使用无边框窗口模式，并关闭聊天框、背包等界面。\n\nTXT 示例：\nBPM=120(可选，不写默认120)\n1 1 5 5 6 6 5- | 0 【1】 (5)\n\n0 是休止；# 升半音；_ 减半；. 附点；- 延长一拍；【】高八度；() 低八度。空格和换行不改变节奏。\n\n当前预设：中音 C4 BPM = 120",
+        "没有不靠谱的事，只有不靠谱的人(doge)\n目录下skill文件夹中是转化简谱的提示词文件，曲库是自带的谱子！\n建议流程：简谱图片 → skill转化简谱 → 打开曲谱 → 本地试听 → 游戏演奏。\n\n点击“游戏演奏”或“继续演奏”后有 3 秒切回游戏；在游戏内按 F8 则立即开始。\n试听与演奏互斥，暂停后需先停止才能试听。\n\n使用方法：F8 演奏／暂停，F9 停止。\n\n注意：\n1:演奏前请装备口琴。\n2:演奏期间若操作键盘或鼠标，拾音会自动暂停并保留进度；松开后按 F8 继续。切出游戏会自动停止。\n3:若提示权限不一致，请点击“以管理员身份重启”；\n4:游戏建议使用无边框窗口模式，并关闭聊天框、背包等界面。\n\nTXT 示例：\nBPM=120(可选，不写默认120)\n1 1 5 5 6 6 5- | 0 【1】 (5)\n\n0 是休止；# 升半音；_ 减半；. 附点；- 延长一拍；【】高八度；() 低八度。空格和换行不改变节奏。\n\n当前预设：中音 C4 BPM = 120",
         "使用帮助", MessageBoxButton.OK, MessageBoxImage.Information);
     private void GitHubClick(object sender, RoutedEventArgs e) => OpenExternalLink("https://github.com/AlexBybye/Delta_Music_Force");
     private void BilibiliClick(object sender, RoutedEventArgs e) => OpenExternalLink("https://space.bilibili.com/426312700");

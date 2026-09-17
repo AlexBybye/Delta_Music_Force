@@ -29,7 +29,7 @@
           </StackPanel>
           <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0,0,0">
             <Border CornerRadius="16" Background="#EAE2D5" Padding="6"><Image Source="Assets/mascot.png" Width="142" Height="142" Stretch="UniformToFill" /></Border>
-            <TextBlock Text="乐器已就位，等你开场。" FontSize="11" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" Margin="0,14,0,0" />
+            <TextBlock Text="吹口琴的时候别挡在我面前，你尔多隆吗！" FontSize="11" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" Margin="0,14,0,0" />
           </StackPanel>
         </Grid>
         <Grid x:Name="SongPanel" Visibility="Collapsed">
