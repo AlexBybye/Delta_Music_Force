@@ -29,6 +29,7 @@ public static class ScoreImport
         int i = text.StartsWith('\ufeff') ? 1 : 0, octave = 0, count = 0;
         char close = '\0'; double bpm = 120, beats = 0;
         var notes = new List<Tone>(); int[] scale = [0, 2, 4, 5, 7, 9, 11];
+        bool triplet = false; int tripletEvents = 0;
         bool hasPriorEvent = false; int? priorTone = null;
         FormatException Error(int at, string message)
         {
@@ -49,10 +50,24 @@ public static class ScoreImport
         {
             cancel.ThrowIfCancellationRequested(); char c = text[i];
             if (char.IsWhiteSpace(c) || c == '|') { i++; continue; }
+            if (c == 'T' && i + 1 < text.Length && text[i + 1] == '{')
+            {
+                if (triplet) throw Error(i, "三连音不能嵌套。");
+                if (close != '\0') throw Error(i, "三连音不能写在音区括号内。");
+                triplet = true; tripletEvents = 0; i += 2; continue;
+            }
+            if (c == '}')
+            {
+                if (!triplet) throw Error(i, "这里没有可结束的三连音组。");
+                if (close != '\0') throw Error(i, "音区括号必须在三连音组结束前闭合。");
+                if (tripletEvents != 3) throw Error(i, "三连音组必须恰好包含三个音符或休止符。");
+                triplet = false; i++; continue;
+            }
             // Chinese scores commonly write a standalone long dash after a note, for example: "1 — —".
             // It extends the immediately preceding note or rest by one beat; it is not a missing new note.
             if (c is '-' or '—' or '–')
             {
+                if (triplet) throw Error(i, "三连音组内的延音必须写在目标音符后。");
                 if (!hasPriorEvent) throw Error(i, "延音线前需要一个音符或休止符。");
                 double extensionEnd = (beats + 1) * 60 / bpm;
                 if (extensionEnd > 1800) throw Error(i, "曲谱不能超过 30 分钟。");
@@ -80,6 +95,7 @@ public static class ScoreImport
             while (i < text.Length && text[i] == '_') { if (++reductions > 2) throw Error(i, "最多两个减时符号。"); duration /= 2; i++; }
             if (i < text.Length && text[i] == '.') { duration *= 1.5; i++; }
             while (i < text.Length && text[i] is '-' or '—') { duration++; i++; if (duration > 64) throw Error(offset, "单个音符不能超过 64 拍。"); }
+            if (triplet) { duration *= 2.0 / 3.0; tripletEvents++; }
             if (++count > MaxNotes) throw Error(offset, "音符和休止符不能超过 30000 个。");
             double startTime = beats * 60 / bpm; beats += duration; double end = beats * 60 / bpm;
             if (end > 1800) throw Error(offset, "曲谱不能超过 30 分钟。");
@@ -88,6 +104,7 @@ public static class ScoreImport
             if (degree != 0) notes.Add(new(count, startTime, end, 60 + octave + scale[degree - 1] + (sharp ? 1 : 0), 90, $"字符 {offset + 1}"));
         }
         if (close != '\0') throw Error(text.Length, "音区括号没有闭合。");
+        if (triplet) throw Error(text.Length, "三连音组没有闭合。");
         if (notes.Count == 0) throw new FormatException("曲谱里没有可播放的音符。");
         return new(title, hash, [new("text", "简谱", notes.ToArray())], beats * 60 / bpm, []);
     }

@@ -23,6 +23,18 @@ Test("TXT rhythm and whitespace", () => {
     Assert(a.Voices[0].Notes[^2].Pitch == 72); Assert(a.Voices[0].Notes[^1].Pitch == 55);
     var b = ScoreImport.ParseText("1\n\n 2\t3"); Near(b.Duration, 1.5);
 });
+Test("TXT triplets", () => {
+    var song = ScoreImport.ParseText("BPM=60\nT{1_ 2_ 【3_】} 4");
+    var notes = song.Voices[0].Notes;
+    Near(notes[0].Start, 0); Near(notes[0].End, 1.0 / 3.0);
+    Near(notes[1].Start, 1.0 / 3.0); Near(notes[1].End, 2.0 / 3.0);
+    Near(notes[2].Start, 2.0 / 3.0); Near(notes[2].End, 1);
+    Near(song.Duration, 2);
+    Reject(() => ScoreImport.ParseText("T{1 2}"));
+    Reject(() => ScoreImport.ParseText("T{1 2 3 4}"));
+    Reject(() => ScoreImport.ParseText("T{1 T{2 3 4} 5}"));
+    Reject(() => ScoreImport.ParseText("T{1 2 3"));
+});
 Test("TXT standalone Chinese duration dash", () => {
     var song = ScoreImport.ParseText("1 — — | 0 — 2");
     Near(song.Voices[0].Notes[0].Start, 0); Near(song.Voices[0].Notes[0].End, 1.5);
