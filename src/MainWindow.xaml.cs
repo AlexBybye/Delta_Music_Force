@@ -291,7 +291,7 @@ public partial class MainWindow : Window
     private async void OnDrop(object sender, DragEventArgs e) { if (e.Data.GetData(DataFormats.FileDrop) is string[] { Length: 1 } files) await LoadSong(files[0]); }
     private void DiagnosticsClick(object sender, RoutedEventArgs e)
     {
-        try { Clipboard.SetText($"DeltaPlayer 0.2.1\n状态: {Status.Text}\n文件: {song?.Hash}\n速度: {plan?.Speed}\n八度: {plan?.Octaves}\n拾音管理员权限: {WindowsIO.ProcessElevated()}\n游戏窗口: {lastTarget?.Title}\n游戏 PID: {lastTarget?.Pid}\n游戏管理员权限: {(lastTarget == null ? null : WindowsIO.ProcessElevated(lastTarget.Pid))}\n{lastError}\n{player.Diagnostics}"); Status.Text = "诊断信息已复制。"; }
+        try { Clipboard.SetText($"DeltaPlayer 0.3.2\n状态: {Status.Text}\n文件: {song?.Hash}\n速度: {plan?.Speed}\n八度: {plan?.Octaves}\n拾音管理员权限: {WindowsIO.ProcessElevated()}\n游戏窗口: {lastTarget?.Title}\n游戏 PID: {lastTarget?.Pid}\n游戏管理员权限: {(lastTarget == null ? null : WindowsIO.ProcessElevated(lastTarget.Pid))}\n{lastError}\n{player.Diagnostics}"); Status.Text = "诊断信息已复制。"; }
         catch (Exception error) { Report(error, "无法访问剪贴板。"); }
     }
     private void HelpClick(object sender, RoutedEventArgs e) => MessageBox.Show(this,
@@ -375,3 +375,4 @@ public partial class MainWindow : Window
         using var output = File.Create(System.IO.Path.Combine(smoke!, name + ".png")); encoder.Save(output);
     }
 }
+
