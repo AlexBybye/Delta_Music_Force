@@ -1,4 +1,7 @@
 # 拾音 · 游戏口琴播放器
+
+<img align="right" src="https://visitor-badge.laobi.icu/badge?page_id=/AlexBybye/Delta_Music_Force">
+
 <img width="500" height="400" alt="image" src="https://github.com/user-attachments/assets/72977317-0fe8-45f6-8905-d630a873c3af" />
 <img width="500" height="400" alt="image" src="https://github.com/user-attachments/assets/73ffe912-1804-4a35-ba17-9789bd72b044" />
 
