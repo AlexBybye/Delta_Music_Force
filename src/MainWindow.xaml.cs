@@ -39,10 +39,11 @@ public partial class MainWindow : Window
             hwnd = new WindowInteropHelper(this).Handle; source = HwndSource.FromHwnd(hwnd); source.AddHook(Hook);
             if (smoke == null)
             {
+                WindowsIO.FallbackHotkey += OnFallbackHotkey;
                 WindowsIO.StartManualInputMonitor();
                 stopReady = WindowsIO.RegisterHotKey(hwnd, 2, 0x4000, 0x78);
                 playReady = WindowsIO.RegisterHotKey(hwnd, 1, 0x4000, 0x77);
-                HotkeyText.Text = $"{(playReady ? "F8 演奏／暂停" : "F8 已被占用")}     {(stopReady ? "F9 停止" : "F9 已被占用，游戏播放不可用")}";
+                HotkeyText.Text = $"F8 演奏／暂停{(playReady ? "" : "（兼容模式）")}     F9 停止{(stopReady ? "" : "（兼容模式）")}";
             }
         };
         timer.Tick += (_, _) =>
@@ -69,6 +70,11 @@ public partial class MainWindow : Window
         if (w == 2) { RequestStop(); handled = true; }
         if (w == 1) { _ = ToggleGame(0); handled = true; }
         return 0;
+    }
+    private void OnFallbackHotkey(int key)
+    {
+        if ((key == 0x77 && playReady) || (key == 0x78 && stopReady)) return;
+        _ = Dispatcher.BeginInvoke(() => { if (key == 0x77) _ = ToggleGame(0); else if (key == 0x78) RequestStop(); });
     }
     private async void OpenClick(object sender, RoutedEventArgs e)
     {
@@ -153,7 +159,6 @@ public partial class MainWindow : Window
             // Wait until Observe has recorded the exact resume position, then start once.
             if (activeUi is { IsCompleted: false }) await activeUi;
             if (closing || player.NeedsRelease || plan == null) return;
-            if (!stopReady) { Status.Text = "停止热键 F9 被其他程序占用，请关闭占用程序后重新打开拾音。试听仍可使用。"; return; }
             var games = WindowsIO.FindGames();
             if (games.Length == 0) { Status.Text = "没有找到三角洲游戏窗口。请先启动游戏，再点击播放。"; return; }
             GameWindow? target = games.Length == 1 ? games[0] : Targets.SelectedItem as GameWindow;
@@ -319,6 +324,7 @@ public partial class MainWindow : Window
             if (player.NeedsRelease) { Status.Text = "仍有按键或设备未清理，请重试释放后关闭。"; return; }
             await SaveSettings(); timer.Stop();
             if (stopReady) WindowsIO.UnregisterHotKey(hwnd, 2); if (playReady) WindowsIO.UnregisterHotKey(hwnd, 1);
+            WindowsIO.FallbackHotkey -= OnFallbackHotkey;
             WindowsIO.StopManualInputMonitor();
             source?.RemoveHook(Hook); allowClose = true;
             _ = Dispatcher.BeginInvoke(Close);

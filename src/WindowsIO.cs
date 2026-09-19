@@ -13,12 +13,13 @@ public sealed record GameWindow(nint Handle, int Pid, long Started, string Title
 public static class WindowsIO
 {
     private const int WhKeyboardLl = 13, WhMouseLl = 14;
-    private const int WmKeyDown = 0x0100, WmSysKeyDown = 0x0104;
+    private const int WmKeyDown = 0x0100, WmKeyUp = 0x0101, WmSysKeyDown = 0x0104, WmSysKeyUp = 0x0105;
     private const int WmMouseMove = 0x0200, WmLButtonDown = 0x0201, WmRButtonDown = 0x0204, WmMButtonDown = 0x0207, WmMouseWheel = 0x020A, WmXButtonDown = 0x020B, WmMouseHWheel = 0x020E;
     private const uint LlkhfInjected = 0x10, LlmhfInjected = 0x01;
     private static LowLevelHook? keyboardHookProc, mouseHookProc;
     private static nint keyboardHook, mouseHook;
-    private static int manualInputArmed, manualInputSeen;
+    private static int manualInputArmed, manualInputSeen, f8Held, f9Held;
+    public static event Action<int>? FallbackHotkey;
     [StructLayout(LayoutKind.Sequential)] public struct Mouse { public int X, Y; public uint Data, Flags, Time; public nuint Extra; }
     [StructLayout(LayoutKind.Sequential)] public struct Keyboard { public ushort Vk, Scan; public uint Flags, Time; public nuint Extra; }
     [StructLayout(LayoutKind.Explicit)] public struct InputUnion { [FieldOffset(0)] public Mouse Mouse; [FieldOffset(0)] public Keyboard Keyboard; }
@@ -132,6 +133,7 @@ public static class WindowsIO
     public static void StopManualInputMonitor()
     {
         DisarmManualInputMonitor();
+        Interlocked.Exchange(ref f8Held, 0); Interlocked.Exchange(ref f9Held, 0);
         if (keyboardHook != 0) { UnhookWindowsHookEx(keyboardHook); keyboardHook = 0; }
         if (mouseHook != 0) { UnhookWindowsHookEx(mouseHook); mouseHook = 0; }
         keyboardHookProc = null; mouseHookProc = null;
@@ -148,12 +150,24 @@ public static class WindowsIO
     internal static string? ConsumeManualInputProblem() => Interlocked.Exchange(ref manualInputSeen, 0) != 0
         ? "检测到键盘或鼠标操作，已暂停。松开后按 F8 继续。" : null;
     public static bool IsManualKeyboardInput(uint virtualKey, uint flags) => virtualKey is not 0x77 and not 0x78 && IsHardwareKeyboardInput(flags);
+    public static bool IsFallbackHotkeyPress(uint virtualKey, int message, uint flags)
+    {
+        if (!IsHardwareKeyboardInput(flags) || virtualKey is not 0x77 and not 0x78) return false;
+        ref int held = ref (virtualKey == 0x77 ? ref f8Held : ref f9Held);
+        if (message is WmKeyUp or WmSysKeyUp) { Interlocked.Exchange(ref held, 0); return false; }
+        return message is WmKeyDown or WmSysKeyDown && Interlocked.Exchange(ref held, 1) == 0;
+    }
     private static nint KeyboardInput(int code, nint message, nint data)
     {
-        if (code >= 0 && Volatile.Read(ref manualInputArmed) != 0 && (message == WmKeyDown || message == WmSysKeyDown))
+        if (code >= 0)
         {
             var input = Marshal.PtrToStructure<KeyboardHookData>(data);
-            if (IsManualKeyboardInput(input.VkCode, input.Flags)) Interlocked.Exchange(ref manualInputSeen, 1);
+            if (IsFallbackHotkeyPress(input.VkCode, (int)message, input.Flags))
+            {
+                try { FallbackHotkey?.Invoke((int)input.VkCode); } catch { }
+            }
+            if (Volatile.Read(ref manualInputArmed) != 0 && (message == WmKeyDown || message == WmSysKeyDown) && IsManualKeyboardInput(input.VkCode, input.Flags))
+                Interlocked.Exchange(ref manualInputSeen, 1);
         }
         return CallNextHookEx(keyboardHook, code, message, data);
     }

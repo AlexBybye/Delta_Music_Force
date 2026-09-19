@@ -205,6 +205,17 @@ Test("manual keyboard or mouse input reports a resumable pause", () => {
     var result = new Player().Run(P(N(1, 0, .5), N(2, .5, 1, 62)), () => output, clock, default);
     Assert(result.Paused && result.NextIndex == 1 && result.Position > 0 && result.PauseNotice != null);
 });
+Test("fallback F8 and F9 fire once per physical key press", () => {
+    Assert(WindowsIO.IsFallbackHotkeyPress(0x77, 0x0100, 0));
+    Assert(!WindowsIO.IsFallbackHotkeyPress(0x77, 0x0100, 0));
+    Assert(!WindowsIO.IsFallbackHotkeyPress(0x77, 0x0101, 0));
+    Assert(WindowsIO.IsFallbackHotkeyPress(0x77, 0x0100, 0));
+    Assert(!WindowsIO.IsFallbackHotkeyPress(0x77, 0x0101, 0));
+    Assert(WindowsIO.IsFallbackHotkeyPress(0x78, 0x0100, 0));
+    Assert(!WindowsIO.IsFallbackHotkeyPress(0x78, 0x0100, 0x10));
+    Assert(!WindowsIO.IsFallbackHotkeyPress(0x78, 0x0101, 0));
+    Assert(!WindowsIO.IsFallbackHotkeyPress(0x76, 0x0100, 0));
+});
 Test("MIDI excessive declared payload rejected", () => {
     byte[] invalid = [0x4d,0x54,0x68,0x64,0,0,0,6,0,0,0,1,1,0xe0,0x4d,0x54,0x72,0x6b,0,0,0,6,0,0xf0,0xff,0xff,0xff,0x7f];
     Reject(() => ScoreImport.ReadMidi(invalid));
