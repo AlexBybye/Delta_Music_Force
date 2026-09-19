@@ -141,11 +141,16 @@ public partial class MainWindow : Window
     private async Task ToggleGame(int countdown)
     {
         if (busy || closing || preview) return;
-        if (player.Active && !preview) { player.Cancel(player.Snapshot.State == "playing"); return; }
+        if (player.Active && !preview && !player.PausePending)
+        {
+            player.Cancel(player.Snapshot.State == "playing");
+            return;
+        }
         busy = true; UpdateControls();
         try
         {
-            // Serialize hotkey requests while the previous session records its resume position.
+            // A second F8 received while pause cleanup is still running means "resume".
+            // Wait until Observe has recorded the exact resume position, then start once.
             if (activeUi is { IsCompleted: false }) await activeUi;
             if (closing || player.NeedsRelease || plan == null) return;
             if (!stopReady) { Status.Text = "停止热键 F9 被其他程序占用，请关闭占用程序后重新打开拾音。试听仍可使用。"; return; }
@@ -291,7 +296,7 @@ public partial class MainWindow : Window
     private async void OnDrop(object sender, DragEventArgs e) { if (e.Data.GetData(DataFormats.FileDrop) is string[] { Length: 1 } files) await LoadSong(files[0]); }
     private void DiagnosticsClick(object sender, RoutedEventArgs e)
     {
-        try { Clipboard.SetText($"DeltaPlayer 0.3.2\n状态: {Status.Text}\n文件: {song?.Hash}\n速度: {plan?.Speed}\n八度: {plan?.Octaves}\n拾音管理员权限: {WindowsIO.ProcessElevated()}\n游戏窗口: {lastTarget?.Title}\n游戏 PID: {lastTarget?.Pid}\n游戏管理员权限: {(lastTarget == null ? null : WindowsIO.ProcessElevated(lastTarget.Pid))}\n{lastError}\n{player.Diagnostics}"); Status.Text = "诊断信息已复制。"; }
+        try { Clipboard.SetText($"DeltaPlayer 0.3.3\n状态: {Status.Text}\n文件: {song?.Hash}\n速度: {plan?.Speed}\n八度: {plan?.Octaves}\n拾音管理员权限: {WindowsIO.ProcessElevated()}\n游戏窗口: {lastTarget?.Title}\n游戏 PID: {lastTarget?.Pid}\n游戏管理员权限: {(lastTarget == null ? null : WindowsIO.ProcessElevated(lastTarget.Pid))}\n{lastError}\n{player.Diagnostics}"); Status.Text = "诊断信息已复制。"; }
         catch (Exception error) { Report(error, "无法访问剪贴板。"); }
     }
     private void HelpClick(object sender, RoutedEventArgs e) => MessageBox.Show(this,

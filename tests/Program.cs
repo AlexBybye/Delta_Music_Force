@@ -163,6 +163,15 @@ Test("stop-start lifecycle uses one owner", () => {
     try { task.GetAwaiter().GetResult(); } catch (OperationCanceledException) { }
     Assert(!player.Active && !player.NeedsRelease);
 });
+Test("a second F8 can be queued while pause cleanup is pending", () => {
+    var player = new Player();
+    var task = player.Start(P(N(1, 0, 5)), () => new Recording(new FakeClock()), countdown: 30);
+    Assert(SpinWait.SpinUntil(() => player.Active, 1000), "session did not start");
+    player.Cancel(true);
+    Assert(!player.Active || player.PausePending, "an active cleanup should expose the pending pause");
+    var result = task.GetAwaiter().GetResult();
+    Assert(result.Paused && !player.PausePending);
+});
 Test("settings corrupted file survives load", () => {
     string dir = Path.Combine(Path.GetTempPath(), "DeltaPlayer-test-" + Guid.NewGuid()); Directory.CreateDirectory(dir);
     try {

@@ -49,6 +49,7 @@ public sealed class Player
     private readonly Queue<string> diagnostics = new();
     public PlaybackSnapshot Snapshot => Volatile.Read(ref snapshot);
     public bool Active => work is { IsCompleted: false };
+    public bool PausePending => Active && Volatile.Read(ref pauseRequested) == 1;
     public bool NeedsRelease => residual != null;
     public string Diagnostics { get { lock (diagnostics) return string.Join(Environment.NewLine, diagnostics); } }
 
